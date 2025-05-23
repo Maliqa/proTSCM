@@ -22,7 +22,9 @@ def init_db():
                 status TEXT NOT NULL,
                 date_start TEXT NOT NULL,
                 date_end TEXT NOT NULL,
-                no_po TEXT
+                no_po TEXT,
+                location TEXT,
+                nomor_ba TEXT
             )
         ''')
         c.execute('''
@@ -50,23 +52,23 @@ def get_all_projects():
         st.error(f"Error fetching projects: {e}")
         return pd.DataFrame()
 
-def add_project(project_name, customer_name, category, pic, status, date_start, date_end, no_po):
+def add_project(project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba):
     try:
         with get_connection() as conn:
             c = conn.cursor()
-            c.execute("INSERT INTO projects (project_name, customer_name, category, pic, status, date_start, date_end, no_po) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                      (project_name, customer_name, category, pic, status, date_start.strftime('%Y-%m-%d'), date_end.strftime('%Y-%m-%d'), no_po))
+            c.execute("INSERT INTO projects (project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      (project_name, customer_name, category, pic, status, date_start.strftime('%Y-%m-%d'), date_end.strftime('%Y-%m-%d'), no_po, location, nomor_ba))
             conn.commit()
             st.success("Project added successfully!")
     except sqlite3.Error as e:
         st.error(f"Error adding project: {e}")
 
-def update_project(id, project_name, customer_name, category, pic, status, date_start, date_end, no_po):
+def update_project(id, project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba):
     try:
         with get_connection() as conn:
             c = conn.cursor()
-            c.execute("UPDATE projects SET project_name=?, customer_name=?, category=?, pic=?, status=?, date_start=?, date_end=?, no_po=? WHERE id=?",
-                      (project_name, customer_name, category, pic, status, date_start.strftime('%Y-%m-%d'), date_end.strftime('%Y-%m-%d'), no_po, id))
+            c.execute("UPDATE projects SET project_name=?, customer_name=?, category=?, pic=?, status=?, date_start=?, date_end=?, no_po=?, location=?, nomor_ba=? WHERE id=?",
+                      (project_name, customer_name, category, pic, status, date_start.strftime('%Y-%m-%d'), date_end.strftime('%Y-%m-%d'), no_po, location, nomor_ba, id))
             conn.commit()
             st.success("Project updated successfully!")
     except sqlite3.Error as e:
@@ -90,7 +92,6 @@ def get_all_project_files(project_id):
     except Exception as e:
         st.error(f"Error fetching project files: {e}")
         return pd.DataFrame()
-
 
 def upload_file(project_id, uploaded_file):
     if uploaded_file is not None:
@@ -130,7 +131,7 @@ st.title("Dashboard Mapping Project TSCM")
 
 tabs = st.tabs(["View Projects", "Add Project", "Edit Project", "Delete Project", "Manage Files"])
 
-with tabs[0]: # View Projects with Progress Bar
+with tabs[0]:  # View Projects with Progress Bar
     df = get_all_projects()
     if not df.empty:
         display_df = df.rename(columns={
@@ -141,7 +142,9 @@ with tabs[0]: # View Projects with Progress Bar
             'status': 'Status',
             'date_start': 'Start Date',
             'date_end': 'End Date',
-            'no_po': 'PO Number'
+            'no_po': 'PO Number',
+            'location': 'Location',
+            'nomor_ba': 'Nomor BA'
         }).set_index('id')
 
         # Menambahkan kolom progress
@@ -155,147 +158,92 @@ with tabs[0]: # View Projects with Progress Bar
         }
         display_df['Progress'] = display_df['Status'].map(status_to_progress)
 
-        # Menampilkan dataframe dengan progress bar
-        for index, row in display_df.iterrows():
-            st.write(f"**{row['Project']} - {row['Customer']}**")
-            st.progress(row['Progress'])
-            st.write(f"Status: {row['Status']}")
-            st.write("---")
+        st.dataframe(display_df)
 
-        # Menampilkan dataframe tanpa progress bar (opsional)
-        st.dataframe(display_df, use_container_width=True)
+        # Tampilkan progress bar per project
+        for idx, row in display_df.iterrows():
+            st.write(f"**{row['Project']}** - Progress: {row['Progress']}%")
+            st.progress(int(row['Progress']))
 
-    else:
-        st.info("No Projects found in the database.")
-
-
-
-
-with tabs[1]:
-    st.subheader("Add New Project")
-    with st.form("add_project_form", clear_on_submit=True):
-        col1, col2 = st.columns(2) # Menggunakan kolom untuk tata letak yang lebih baik
-
-        with col1:
-            new_project = st.text_input("Project Name")
-            new_customer = st.text_input("Customer Name") # Input untuk nama customer
-
-        with col2:
-            new_category = st.selectbox("Category", ["Project", "Service"])
-            new_pic = st.text_input("PIC")
-            new_status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"])
-            new_no_po = st.text_input("PO Number")
-
-        st.write("Select Start and End Dates")
-        today = datetime.date.today()
-        start_date, end_date = st.date_input(
-            "Select start and end dates",
-            value=(today, today + datetime.timedelta(days=30)),
-            min_value=today - datetime.timedelta(days=365),
-            max_value=today + datetime.timedelta(days=365),
+#Tambahkan grafik progress (Bar Chart)
+        fig = go.Figure(data=[
+            go.Bar(
+                x=display_df['Project'],
+                y=display_df['Progress'],
+                marker_color='lightskyblue'
+            )
+        ])
+        fig.update_layout(
+            title='Progress Project',
+            xaxis_title='Project',
+            yaxis_title='Progress (%)',
+            yaxis=dict(range=[0, 100])
         )
-        submit_button = st.form_submit_button(label="Add Project")
-        if submit_button:
-            if new_project and new_customer and new_pic: # Validasi semua field wajib diisi
-                if isinstance((start_date, end_date), tuple) and len((start_date, end_date)) == 2:
-                    add_project(new_project, new_customer, new_category, new_pic, new_status, start_date, end_date, new_no_po)
-                else:
-                    st.error("Please select both start and end dates.")
-            else:
-                st.error("Project Name, Customer Name, and PIC are required!")
+        st.plotly_chart(fig)
 
+with tabs[1]:  # Add Project
+    st.subheader("Tambah Project Baru")
+    project_name = st.text_input("Project Name")
+    customer_name = st.text_input("Customer Name")
+    category = st.text_input("Category")
+    pic = st.text_input("PIC")
+    status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"])
+    date_start = st.date_input("Start Date", value=datetime.date.today())
+    date_end = st.date_input("End Date", value=datetime.date.today())
+    no_po = st.text_input("PO Number")
+    location = st.text_input("Location")
+    nomor_ba = st.text_input("Nomor BA")
 
-with tabs[2]:
+    if st.button("Add Project"):
+        add_project(project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba)
+
+with tabs[2]:  # Edit Project
     st.subheader("Edit Project")
     df = get_all_projects()
     if not df.empty:
-        options = df[['id', 'project_name']]
-        selected_option = st.selectbox(
-            "Choose a Project to Edit",
-            options['id'].tolist(),
-            format_func=lambda x: options[options['id'] == x]['project_name'].iloc[0]
-        )
-        selected_row = df[df['id'] == selected_option].iloc[0]
-        with st.form("edit_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
+        project_options = df['project_name'] + " (ID: " + df['id'].astype(str) + ")"
+        selected = st.selectbox("Pilih Project", project_options)
+        selected_id = int(selected.split("ID: ")[1].replace(")", ""))
+        selected_project = df[df['id'] == selected_id].iloc[0]
 
-            with col1:
-                edit_project_name = st.text_input("Project Name", selected_row["project_name"])
-                edit_customer_name = st.text_input("Customer Name", selected_row["customer_name"])
+        project_name = st.text_input("Project Name", value=selected_project['project_name'])
+        customer_name = st.text_input("Customer Name", value=selected_project['customer_name'])
+        category = st.text_input("Category", value=selected_project['category'])
+        pic = st.text_input("PIC", value=selected_project['pic'])
+        status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"], index=["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"].index(selected_project['status']))
+        date_start = st.date_input("Start Date", value=datetime.datetime.strptime(selected_project['date_start'], "%Y-%m-%d"))
+        date_end = st.date_input("End Date", value=datetime.datetime.strptime(selected_project['date_end'], "%Y-%m-%d"))
+        no_po = st.text_input("PO Number", value=selected_project['no_po'] if pd.notnull(selected_project['no_po']) else "")
+        location = st.text_input("Location", value=selected_project['location'] if pd.notnull(selected_project['location']) else "")
+        nomor_ba = st.text_input("Nomor BA", value=selected_project['nomor_ba'] if pd.notnull(selected_project['nomor_ba']) else "")
 
-            with col2:
-                edit_category = st.selectbox("Category", ["Project", "Service"], index=["Project", "Service"].index(selected_row['category']))
-                edit_pic = st.text_input("PIC", selected_row["pic"])
-                edit_status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"], index=["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"].index(selected_row["status"]))
-                edit_no_po = st.text_input("PO Number", selected_row["no_po"])
-
-            st.write("Select Start and End Dates")
-            start_dt = datetime.datetime.strptime(selected_row['date_start'], '%Y-%m-%d').date()
-            end_dt = datetime.datetime.strptime(selected_row['date_end'], '%Y-%m-%d').date()
-            start_dt, end_dt = st.date_input(
-                "Select start and end dates",
-                value=(start_dt, end_dt),
-                min_value=datetime.date.today() - datetime.timedelta(days=365),
-                max_value=datetime.date.today() + datetime.timedelta(days=365)
-            )
-            update_btn = st.form_submit_button(label="Update Project")
-            if update_btn:
-                update_project(selected_option, edit_project_name, edit_customer_name, edit_category, edit_pic, edit_status, start_dt, end_dt, edit_no_po)
-
-
+        if st.button("Update Project"):
+            update_project(selected_id, project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba)
 
 with tabs[3]:  # Delete Project
     st.subheader("Delete Project")
     df = get_all_projects()
     if not df.empty:
-        # Mengambil daftar proyek dan nama customer
-        project_options = df[['id', 'project_name', 'customer_name']]
-        delete_selected_option = st.selectbox(
-            "Choose a Project to Delete",
-            project_options['id'].tolist(),
-            format_func=lambda x: f"{project_options[project_options['id'] == x]['project_name'].iloc[0]} - {project_options[project_options['id'] == x]['customer_name'].iloc[0]}" # Menampilkan project_name dan customer_name
-        )
-        if st.button("Delete Selected Project"):
-            delete_project(delete_selected_option)
-
+        project_options = df['project_name'] + " (ID: " + df['id'].astype(str) + ")"
+        selected = st.selectbox("Pilih Project untuk Dihapus", project_options)
+        selected_id = int(selected.split("ID: ")[1].replace(")", ""))
+        if st.button("Delete Project"):
+            delete_project(selected_id)
 
 with tabs[4]:  # Manage Files
-    st.subheader("Manage Files for Each Project")
-    df_projects = get_all_projects()
-    if not df_projects.empty:
-        # Mengambil daftar proyek dan nama customer
-        project_options = df_projects[['id', 'project_name', 'customer_name']]  # Tambahkan 'customer_name'
-        selected_project = st.selectbox(
-            "Choose a Project to Manage Files",
-            project_options['id'].tolist(),
-            format_func=lambda x: f"{project_options[project_options['id'] == x]['project_name'].iloc[0]} - {project_options[project_options['id'] == x]['customer_name'].iloc[0]}" # Tampilkan project_name dan customer_name
-        )
-
-
-        # Sisanya tetap sama seperti sebelumnya
-        uploaded_file = st.file_uploader(
-            "Upload New File Here",
-            type=['pdf', 'docx', 'png', 'jpg', 'jpeg']
-        )
-
-        if st.button("Upload New File"):
-            upload_file(selected_project, uploaded_file)
-
-        files_df = get_all_project_files(selected_project)
-
-        for _, row in files_df.iterrows():
-            col1, col2, col3 = st.columns([6, 2, 1])
-            col1.write(row['file_name'])
-            col2.download_button(
-                label="Download",
-                data=open(row['file_path'], 'rb').read(),
-                file_name=row['file_name'],
-                mime='application/octet-stream',
-                key=f'download-{row.id}'
-            )
-            col3.button(
-                label="Delete",
-                key=row.id,
-                on_click=delete_file,
-                args=(row.id,)
-            )
+    st.subheader("Manage Files")
+    df = get_all_projects()
+    if not df.empty:
+        project_options = df['project_name'] + " (ID: " + df['id'].astype(str) + ")"
+        selected = st.selectbox("Pilih Project untuk Kelola File", project_options)
+        selected_id = int(selected.split("ID: ")[1].replace(")", ""))
+        uploaded_file = st.file_uploader("Upload File", type=None)
+        if st.button("Upload File"):
+            upload_file(selected_id, uploaded_file)
+        files_df = get_all_project_files(selected_id)
+        if not files_df.empty:
+            st.write("Daftar File:")
+            for idx, row in files_df.iterrows():
+                st.write(f"{row['file_name']} - {row['upload_date']}")
+                if st.button(f"Delete {row['file_name']}", key=f"del_{row['id']}"):
+                    delete_file(row['id'])
