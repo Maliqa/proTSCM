@@ -150,10 +150,10 @@ with tabs[0]:  # View Projects with Progress Bar
         # Menambahkan kolom progress
         status_to_progress = {
             "Not Started": 0,
-            "Waiting BA": 20,
-            "Not Report": 40,
-            "In Progress": 60,
-            "On Hold": 80,
+            "Waiting BA": 60,
+            "Not Report": 80,
+            "In Progress": 40,
+            "On Hold": 20,
             "Completed": 100
         }
         display_df['Progress'] = display_df['Status'].map(status_to_progress)
