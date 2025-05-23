@@ -1,0 +1,7 @@
+streamlit
+Pillow
+pandas
+sqlite3
+datetime
+os
+plotly
