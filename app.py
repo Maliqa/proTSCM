@@ -4,11 +4,14 @@ import pandas as pd
 import sqlite3
 import datetime
 import os
+import plotly.express as px
 import plotly.graph_objects as go
+import zipfile
+import io
 
 st.set_page_config(page_title="CISTECH", page_icon="assets/favicon.ico")
 
-# --- Fungsi Database ---
+# --- Database Functions ---
 def init_db():
     with sqlite3.connect('project_mapping.db') as conn:
         c = conn.cursor()
@@ -125,13 +128,12 @@ def delete_file(file_id):
 
 # --- Streamlit App ---
 init_db()
-st.image("cistech.png", width=450)
-
+st.image("cistech.png", width=550) # Remember to place cistech.png in the same directory
 st.title("Dashboard Mapping Project TSCM")
 
 tabs = st.tabs(["View Projects", "Add Project", "Edit Project", "Delete Project", "Manage Files"])
 
-with tabs[0]:  # View Projects with Progress Bar
+with tabs[0]:
     df = get_all_projects()
     if not df.empty:
         display_df = df.rename(columns={
@@ -147,7 +149,6 @@ with tabs[0]:  # View Projects with Progress Bar
             'nomor_ba': 'Nomor BA'
         }).set_index('id')
 
-        # Menambahkan kolom progress
         status_to_progress = {
             "Not Started": 0,
             "Waiting BA": 60,
@@ -160,12 +161,10 @@ with tabs[0]:  # View Projects with Progress Bar
 
         st.dataframe(display_df)
 
-        # Tampilkan progress bar per project
         for idx, row in display_df.iterrows():
             st.write(f"**{row['Project']}** - Progress: {row['Progress']}%")
             st.progress(int(row['Progress']))
 
-#Tambahkan grafik progress (Bar Chart)
         fig = go.Figure(data=[
             go.Bar(
                 x=display_df['Project'],
@@ -181,23 +180,32 @@ with tabs[0]:  # View Projects with Progress Bar
         )
         st.plotly_chart(fig)
 
-with tabs[1]:  # Add Project
+with tabs[1]:
     st.subheader("Tambah Project Baru")
-    project_name = st.text_input("Project Name")
-    customer_name = st.text_input("Customer Name")
-    category = st.text_input("Category")
-    pic = st.text_input("PIC")
-    status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "On Hold", "Completed"])
-    date_start = st.date_input("Start Date", value=datetime.date.today())
-    date_end = st.date_input("End Date", value=datetime.date.today())
-    no_po = st.text_input("PO Number")
-    location = st.text_input("Location")
-    nomor_ba = st.text_input("Nomor BA")
+    with st.container():
+        col1, col2 = st.columns(2)
+        with col1:
+            project_name = st.text_input("Project Name")
+            customer_name = st.text_input("Customer Name")
+            category = st.text_input("Category")
+            pic = st.text_input("PIC")
+            location = st.text_input("Location")
+        with col2:
+            status = st.selectbox("Status", ["Not Started", "Waiting BA", "Not Report", "In Progress", "Completed"])
+            date_col1, date_col2 = st.columns(2)
+            with date_col1:
+                date_start = st.date_input("Start Date", value=datetime.date.today())
+            with date_col2:
+                date_end = st.date_input("End Date", value=datetime.date.today())
+            no_po = st.text_input("PO Number")
+            nomor_ba = st.text_input("Nomor BA")
+    if st.button("Add Project", key="add_project_button"):
+        if project_name and customer_name and category and pic:
+            add_project(project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba)
+        else:
+            st.error("Harap isi semua field wajib (Project Name, Customer Name, Category, PIC)")
 
-    if st.button("Add Project"):
-        add_project(project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba)
-
-with tabs[2]:  # Edit Project
+with tabs[2]:
     st.subheader("Edit Project")
     df = get_all_projects()
     if not df.empty:
@@ -220,7 +228,7 @@ with tabs[2]:  # Edit Project
         if st.button("Update Project"):
             update_project(selected_id, project_name, customer_name, category, pic, status, date_start, date_end, no_po, location, nomor_ba)
 
-with tabs[3]:  # Delete Project
+with tabs[3]:
     st.subheader("Delete Project")
     df = get_all_projects()
     if not df.empty:
@@ -230,20 +238,75 @@ with tabs[3]:  # Delete Project
         if st.button("Delete Project"):
             delete_project(selected_id)
 
-with tabs[4]:  # Manage Files
-    st.subheader("Manage Files")
+
+with tabs[4]:
+    st.header("Manage Files")
     df = get_all_projects()
-    if not df.empty:
-        project_options = df['project_name'] + " (ID: " + df['id'].astype(str) + ")"
-        selected = st.selectbox("Pilih Project untuk Kelola File", project_options)
-        selected_id = int(selected.split("ID: ")[1].replace(")", ""))
-        uploaded_file = st.file_uploader("Upload File", type=None)
-        if st.button("Upload File"):
-            upload_file(selected_id, uploaded_file)
-        files_df = get_all_project_files(selected_id)
-        if not files_df.empty:
-            st.write("Daftar File:")
-            for idx, row in files_df.iterrows():
-                st.write(f"{row['file_name']} - {row['upload_date']}")
-                if st.button(f"Delete {row['file_name']}", key=f"del_{row['id']}"):
-                    delete_file(row['id'])
+    if df.empty:
+        st.info("No projects available. Please add a project first.")
+    else:
+        project_names = df['project_name'].tolist()
+        project_id_map = dict(zip(df['project_name'], df['id']))
+        selected_project = st.selectbox("Select Project", project_names)
+        if selected_project:
+            project_id = project_id_map[selected_project]
+            st.markdown("---")
+            st.subheader(f"Upload Files for {selected_project}")
+            required_files = [
+                "FORM REQUEST APPROVAL",
+                "FORM TIM TEKNISI",
+                "SPK",
+                "BAST",
+                "REPORT"
+            ]
+            for req in required_files:
+                uploaded_file = st.file_uploader(f"Upload {req}", type=None, key=f"{req}_{project_id}")
+                if uploaded_file:
+                    upload_file(project_id, uploaded_file)
+            st.markdown("---")
+            st.subheader("Uploaded Files")
+            files_df = get_all_project_files(project_id)
+            if files_df.empty:
+                st.info("No files uploaded for this project.")
+            else:
+                # ZIP Download Button (if all files exist)
+                file_paths = files_df['file_path'].tolist()
+                if all(os.path.exists(fp) for fp in file_paths):
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                        for idx, row in files_df.iterrows():
+                            file_path = row['file_path']
+                            file_name = row['file_name']
+                            zipf.write(file_path, arcname=file_name)
+                    zip_buffer.seek(0)
+                    st.download_button(
+                        label="Download All Files as ZIP",
+                        data=zip_buffer,
+                        file_name=f"project_{project_id}_files.zip",
+                        mime="application/zip"
+                    )
+                for idx, row in files_df.iterrows():
+                    file_path = row['file_path']
+                    file_name = row['file_name']
+                    file_id = row['id']
+                    with st.expander(f"[ID: {file_id}] {file_name}"):
+                        if os.path.exists(file_path):
+                            if file_name.lower().endswith((".jpg", ".jpeg", ".png")):
+                                image = Image.open(file_path)
+                                st.image(image, caption=file_name, use_column_width=True)
+                            elif file_name.lower().endswith(".pdf"):
+                                st.write("(Preview not available for PDF)")
+                            else:
+                                st.write("(Preview not available for this file type)")
+                            with open(file_path, "rb") as f:
+                                st.download_button(
+                                    label="Download",
+                                    data=f,
+                                    file_name=file_name,
+                                    mime="application/octet-stream",
+                                    key=f"download_{file_id}"
+                                )
+                        else:
+                            st.error(f"File not found: {file_path}")
+
+                
