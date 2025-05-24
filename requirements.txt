@@ -1,6 +1,4 @@
 streamlit
 Pillow
 pandas
-datetime
-os
 plotly
