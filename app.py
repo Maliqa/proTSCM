@@ -354,5 +354,6 @@ def manage_files():
                                 )
                         else:
                             st.error(f"File tidak ditemukan: {file_path}")
-
+                    if __name__ == "__main__":
+                       manage_files()
                 
