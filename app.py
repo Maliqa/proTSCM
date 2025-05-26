@@ -37,7 +37,8 @@ def init_db():
                 file_name TEXT NOT NULL,
                 file_path TEXT NOT NULL,
                 upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (project_id) REFERENCES projects(id)
+                FOREIGN KEY (project_id) REFERENCES projects(id),
+                 UNIQUE (project_id, file_name)
             )
         ''')
         conn.commit()
@@ -122,8 +123,15 @@ def upload_file(project_id, uploaded_file, file_category):
         directory = f"files/project_{project_id}/{file_category}/"
         os.makedirs(directory, exist_ok=True)
         filepath = os.path.join(directory, uploaded_file.name)
+
+        # Check if file already exists
+        if os.path.exists(filepath):
+            st.error(f"File '{uploaded_file.name}' already exists for this project. Please rename the file.")
+            return  # Stop further processing
+
         with open(filepath, "wb") as f:
             f.write(uploaded_file.getbuffer())
+        # ... (rest of your upload_file function remains the same) ...
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO project_files (project_id, file_name, file_path, file_category) VALUES (?, ?, ?, ?)",
