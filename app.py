@@ -257,7 +257,8 @@ with tabs[4]:
                 "FORM TIM TEKNISI",
                 "SPK",
                 "BAST",
-                "REPORT"
+                "REPORT",
+                "TIME SCHEDULE"
             ]
             for req in required_files:
                 uploaded_file = st.file_uploader(f"Upload {req}", type=None, key=f"{req}_{project_id}")
