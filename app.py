@@ -139,7 +139,7 @@ def upload_file(project_id, uploaded_file):
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO project_files (project_id, file_name, file_path, file_type) 
-                VALUES (%s, %s, %s, %s)
+                VALUES (?, ?, ?, ?)
             """, (project_id, uploaded_file.name, filepath, file_ext))
             conn.commit()
             
