@@ -111,6 +111,42 @@ def delete_file(file_id):
                 st.error("File does not exist.")
     except Exception as e:
         st.error(f"Error deleting file: {e}")
+        
+        # Fungsi untuk upload file
+def upload_file(project_id, uploaded_file):
+    if uploaded_file is not None:
+        # Validasi ekstensi file
+        allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg']
+        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+        
+        if file_ext not in allowed_extensions:
+            st.error("Format file tidak didukung. Harus PDF, DOC/DOCX, XLS/XLSX, atau JPG/JPEG")
+            return False
+            
+        directory = f"files/project_{project_id}/"
+        os.makedirs(directory, exist_ok=True)
+        filepath = os.path.join(directory, uploaded_file.name)
+        
+        # Cek duplikasi file
+        if os.path.exists(filepath):
+            st.warning(f"File {uploaded_file.name} sudah ada!")
+            return False
+            
+        with open(filepath, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+            
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO project_files (project_id, file_name, file_path, file_type) 
+                VALUES (%s, %s, %s, %s)
+            """, (project_id, uploaded_file.name, filepath, file_ext))
+            conn.commit()
+            
+        st.success("File uploaded successfully!")
+        return True
+    return False
+
 
 # --- Streamlit App ---
 init_db()
@@ -224,136 +260,103 @@ with tabs[3]:
         if st.button("Delete Project"):
             delete_project(selected_id)
 
-# Fungsi untuk upload file dengan pengecekan duplikat
-def upload_file(project_id, uploaded_file):
-    """
-    Menyimpan file yang diupload dengan pengecekan duplikasi
-    Return:
-        - True jika berhasil disimpan
-        - False jika file sudah ada
-    """
-    # Buat direktori upload jika belum ada
-    upload_dir = os.path.join("uploads", str(project_id))
-    os.makedirs(upload_dir, exist_ok=True)
+# Fungsi untuk menampilkan dan mengelola file
+with tabs[4]:  # Manage Files
+    st.subheader("Manage Files for Each Project")
+    df_projects = get_all_projects()
     
-    # Path lengkap file yang akan disimpan
-    file_path = os.path.join(upload_dir, uploaded_file.name)
-    
-    # Cek apakah file sudah ada
-    if os.path.exists(file_path):
-        return False
-    
-    # Simpan file ke sistem
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    # Simpan info file ke database
-    save_to_database(project_id, uploaded_file.name, file_path)
-    
-    return True
-
-# Fungsi utama untuk manajemen file
-def manage_files():
-    st.header("Manage Files")
-    
-    # Dapatkan daftar proyek
-    df = get_all_projects()
-    
-    if df.empty:
-        st.info("No projects available. Please add a project first.")
-    else:
-        project_names = df['project_name'].tolist()
-        project_id_map = dict(zip(df['project_name'], df['id']))
+    if not df_projects.empty:
+        project_options = df_projects[['id', 'project_name', 'customer_name']]
+        selected_project = st.selectbox(
+            "Choose a Project to Manage Files",
+            project_options['id'].tolist(),
+            format_func=lambda x: f"{project_options[project_options['id'] == x]['project_name'].iloc[0]} - {project_options[project_options['id'] == x]['customer_name'].iloc[0]}"
+        )
         
-        selected_project = st.selectbox("Select Project", project_names)
+        # Daftar file wajib
+        required_files = [
+            "FORM REQUEST",
+            "FORM TIM PROJECT",
+            "SPK",
+            "BAST",
+            "TIME SCHEDULE",
+            "REPORT"
+        ]
         
-        if selected_project:
-            project_id = project_id_map[selected_project]
+        st.markdown("### Upload Dokumen Wajib")
+        for req_file in required_files:
+            uploaded_file = st.file_uploader(
+                f"Upload {req_file}",
+                type=['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg'],
+                key=f"{req_file}_{selected_project}"
+            )
+            if uploaded_file:
+                upload_file(selected_project, uploaded_file)
+        
+        # Upload file tambahan
+        st.markdown("### Upload File Tambahan")
+        additional_file = st.file_uploader(
+            "Upload File Tambahan",
+            type=['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg']
+        )
+        
+        if st.button("Upload File Tambahan"):
+            upload_file(selected_project, additional_file)
+        
+        # Tampilkan file yang sudah diupload
+        st.markdown("### File Terupload")
+        files_df = get_all_project_files(selected_project)
+        
+        if not files_df.empty:
+            # Tombol download semua file dalam ZIP
+            zip_buffer = io.BytesIO()
             
-            # Section upload file
-            st.markdown("---")
-            st.subheader(f"Upload Files for {selected_project}")
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+                for _, row in files_df.iterrows():
+                    if os.path.exists(row['file_path']):
+                        zipf.write(row['file_path'], arcname=row['file_name'])
             
-            required_files = [
-                "FORM REQUEST APPROVAL",
-                "FORM TIM TEKNISI",
-                "SPK",
-                "BAST",
-                "REPORT",
-                "TIME SCHEDULE"
-            ]
+            zip_buffer.seek(0)
             
-            for req in required_files:
-                uploaded_file = st.file_uploader(
-                    f"Upload {req}", 
-                    type=None, 
-                    key=f"{req}_{project_id}"
-                )
+            project_name = project_options[project_options['id'] == selected_project]['project_name'].iloc[0]
+            zip_filename = f"{project_name.replace(' ', '_')}_files.zip"
+            
+            st.download_button(
+                label="Download Semua File (ZIP)",
+                data=zip_buffer,
+                file_name=zip_filename,
+                mime="application/zip",
+                key=f"zip_download_{selected_project}"
+            )
+            
+            # Tampilkan detail file
+            for _, row in files_df.iterrows():
+                col1, col2, col3 = st.columns([6, 2, 1])
+                col1.write(row['file_name'])
                 
-                if uploaded_file:
-                    if upload_file(project_id, uploaded_file):
-                        st.success(f"File {uploaded_file.name} berhasil diupload!")
-                    else:
-                        st.warning(f"File {uploaded_file.name} sudah ada!")
-            
-            # Section tampilkan file yang sudah diupload
-            st.markdown("---")
-            st.subheader("Uploaded Files")
-            
-            files_df = get_all_project_files(project_id)
-            
-            if files_df.empty:
-                st.info("No files uploaded for this project.")
-            else:
-                # Tombol download ZIP jika semua file ada
-                file_paths = files_df['file_path'].tolist()
-                
-                if all(os.path.exists(fp) for fp in file_paths):
-                    zip_buffer = io.BytesIO()
-                    
-                    with zipfile.ZipFile(zip_buffer, "w") as zipf:
-                        for idx, row in files_df.iterrows():
-                            file_path = row['file_path']
-                            file_name = row['file_name']
-                            zipf.write(file_path, arcname=file_name)
-                    
-                    zip_buffer.seek(0)
-                    
-                    st.download_button(
-                        label="Download All Files as ZIP",
-                        data=zip_buffer,
-                        file_name=f"project_{project_id}_files.zip",
-                        mime="application/zip"
+                if os.path.exists(row['file_path']):
+                    col2.download_button(
+                        label="Download",
+                        data=open(row['file_path'], 'rb').read(),
+                        file_name=row['file_name'],
+                        mime='application/octet-stream',
+                        key=f'download-{row.id}'
                     )
+                else:
+                    col2.warning("File tidak ditemukan")
                 
-                # Tampilkan detail setiap file
-                for idx, row in files_df.iterrows():
-                    file_path = row['file_path']
-                    file_name = row['file_name']
-                    file_id = row['id']
+                col3.button(
+                    label="Delete",
+                    key=row.id,
+                    on_click=delete_file,
+                    args=(row.id,)
+                )
+        else:
+            st.info("Belum ada file yang diupload untuk project ini.")
+            
+           
+                
                     
-                    with st.expander(f"[ID: {file_id}] {file_name}"):
-                        if os.path.exists(file_path):
-                            # Preview berdasarkan tipe file
-                            if file_name.lower().endswith((".jpg", ".jpeg", ".png")):
-                                image = Image.open(file_path)
-                                st.image(image, caption=file_name, use_column_width=True)
-                            elif file_name.lower().endswith(".pdf"):
-                                st.write("(Preview tidak tersedia untuk PDF)")
-                            else:
-                                st.write("(Preview tidak tersedia untuk tipe file ini)")
-                            
-                            # Tombol download individual
-                            with open(file_path, "rb") as f:
-                                st.download_button(
-                                    label="Download",
-                                    data=f,
-                                    file_name=file_name,
-                                    mime="application/octet-stream",
-                                    key=f"download_{file_id}"
-                                )
-                        else:
-                            st.error(f"File tidak ditemukan: {file_path}")
-                    if __name__ == "__main__":
-                       manage_files()
+                    
+                  
                 
