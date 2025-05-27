@@ -76,7 +76,7 @@ def add_project():
             pic = st.text_input("PIC*")
         
         with col2:
-            status = st.selectbox("Status*", ["Waiting BA", "On Going", "Completed", "Waiting BA"])
+            status = st.selectbox("Status*", ["No Started", "On Going", "Completed", "Waiting BA"])
             date_start = st.date_input("Start Date*")
             date_end = st.date_input("End Date*")
             no_po = st.text_input("PO Number")
