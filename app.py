@@ -76,7 +76,7 @@ def add_project():
             pic = st.text_input("PIC*")
         
         with col2:
-            status = st.selectbox("Status*", ["Waiting BA", "On Going", "Completed"])
+            status = st.selectbox("Status*", ["Waiting BA", "On Going", "Completed", "Waiting BA"])
             date_start = st.date_input("Start Date*")
             date_end = st.date_input("End Date*")
             no_po = st.text_input("PO Number")
@@ -116,7 +116,7 @@ def edit_project(project_id):
                 pic = st.text_input("PIC*", value=project[4])
             
             with col2:
-                status = st.selectbox("Status*", ["Planning", "On Going", "Completed"], 
+                status = st.selectbox("Status*", ["Planning", "On Going", "Completed", "Waiting BA"], 
                                     index=["Planning", "On Going", "Completed"].index(project[5]))
                 date_start = st.date_input("Start Date*", value=datetime.strptime(project[6], '%Y-%m-%d').date())
                 date_end = st.date_input("End Date*", value=datetime.strptime(project[7], '%Y-%m-%d').date())
