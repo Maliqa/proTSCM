@@ -112,7 +112,7 @@ def edit_project(project_id):
             with col1:
                 project_name = st.text_input("Project Name*", value=project[1])
                 customer_name = st.text_input("Customer Name*", value=project[2])
-                category = st.selectbox("Category*", ["TSCM", "Other"], index=0 if project[3] == "TSCM" else 1)
+                category = st.selectbox("Category*", ["Service", "Project"], index=0 if project[3] == "TSCM" else 1)
                 pic = st.text_input("PIC*", value=project[4])
             
             with col2:
