@@ -117,7 +117,7 @@ def edit_project(project_id):
             
             with col2:
                 status = st.selectbox("Status*", ["Planning", "On Going", "Completed", "Waiting BA"], 
-                                    index=["Planning", "On Going", "Completed"].index(project[5]))
+                                    index=["Planning", "On Going", "Completed", "waiting BA"].index(project[5]))
                 date_start = st.date_input("Start Date*", value=datetime.strptime(project[6], '%Y-%m-%d').date())
                 date_end = st.date_input("End Date*", value=datetime.strptime(project[7], '%Y-%m-%d').date())
                 no_po = st.text_input("PO Number", value=project[8])
