@@ -59,7 +59,7 @@ def search_projects(search_term):
 
 # Tampilan header
 st.image("cistech.png", width=450)
-st.title("Dashboard Mapping Project TSCM ISO 9001-2015")
+st.title("Dashboard Mapping Project TSCM-ISO 9001-2015")
 
 def add_project():
     with st.form(key='add_project_form'):
